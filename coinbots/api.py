@@ -89,8 +89,8 @@ class CCAPI:
 if __name__ == '__main__':
 
     async def main():
-        apiKey = 'Bx88Ks_7oX-zJmhm'
-        secret = 'fDbaXew4dyh7cNwiWkKSiAdAbR-HJRNn'
+        apiKey = ''
+        secret = ''
         api = CCAPI(apiKey, secret)
 
         # ticker = await api.ticker('btc_jpy')
