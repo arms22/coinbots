@@ -28,7 +28,6 @@ class Streaming:
             dat['rate'] = float(data[2])
             dat['amount'] = float(data[3])
             dat['order_type'] = data[4]
-            dat['received_at'] = datetime.utcnow()
         elif len(data)==2:
             channel = data[0]+'-orderbook'
             dat['asks'] = [ [float(b[0]),float(b[1])] for b in data[1].get('asks',[])]
@@ -68,8 +67,8 @@ class Streaming:
                     del self.subscribed_channels[channel]
 
     # Public
-    async def get_trades_endpoint(self, pair):
-        ep = Streaming.BufferedEndpoint()
+    async def get_trades_endpoint(self, pair, maxlen=100):
+        ep = Streaming.BufferedEndpoint(maxlen=maxlen)
         return await self.add_endpoint(pair+'-trades',ep)
 
     async def get_orderbook_endpoint(self, pair):

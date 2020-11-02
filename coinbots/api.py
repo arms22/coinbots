@@ -78,7 +78,7 @@ class CCAPI:
         return await self.fetch('GET', '/api/exchange/orders/cancel_status', params={'id':order_id})
 
     async def transactions(self, **kwargs):
-        return await self.pagination('/api/exchange/orders/transactions_pagination', **kwargs)
+        return await self.fetch('GET', '/api/exchange/orders/transactions_pagination', params=kwargs)
 
     async def balance(self):
         return await self.fetch('GET', '/api/accounts/balance')
@@ -102,8 +102,8 @@ if __name__ == '__main__':
         # trades = await api.trades(pair='btc_jpy', limit=20)
         # print(trades)
 
-        rate = await api.orders_rate(pair='btc_jpy', order_type='buy', amount='0.01')
-        print(rate)
+        # rate = await api.orders_rate(pair='btc_jpy', order_type='buy', amount='0.01')
+        # print(rate)
 
         # status = await api.cancel_status(1)
         # print(status)
@@ -114,8 +114,8 @@ if __name__ == '__main__':
         # transactions = await api.transactions(ending_before=189947209, limit=100)
         # print(transactions)
 
-        # balance = await api.balance()
-        # print(balance)
+        balance = await api.balance()
+        print(balance)
 
         await api.close()
     asyncio.get_event_loop().run_until_complete(main())
