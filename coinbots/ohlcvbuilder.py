@@ -53,8 +53,4 @@ class OHLCVBuilder:
         ohlcv.trades = ohlcv.buy_count + ohlcv.sell_count
         ohlcv.imbalance = ohlcv.buy_count - ohlcv.sell_count
         ohlcv.average = sum(price) / len(price)
-        # ohlcv.average_sq = sum(p**2 for p in price) / len(price)
-        # ohlcv.variance = ohlcv.average_sq - (ohlcv.average * ohlcv.average)
-        # ohlcv.stdev = sqrt(ohlcv.variance)
-        # ohlcv.vwap = sum(e['price']*e['size'] for e in executions) / ohlcv.volume if ohlcv.volume > 0 else price[-1]
         return ohlcv

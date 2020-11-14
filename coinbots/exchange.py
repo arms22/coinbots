@@ -36,12 +36,16 @@ class Exchange:
             raise ExchangeError(f'{error} in {errfrom}')
 
     async def order(self, pair, side, amount, rate, stop_loss_rate=None):
+        spec = Exchange.ProductSpecs[pair]
+        amount = spec.round_amount(amount)
         params = {
             'pair':pair
         }
         if stop_loss_rate:
+            stop_loss_rate = spec.round_price(stop_loss_rate)
             params['stop_loss_rate'] = stop_loss_rate
         if rate:
+            rate = spec.round_price(rate)
             params['rate'] = rate
             params['amount'] = amount
             params['order_type'] = side.lower()

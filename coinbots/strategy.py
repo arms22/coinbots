@@ -3,7 +3,7 @@ import logging
 import asyncio
 from .utils import dotdict
 from .streaming import Streaming
-from .ohlcvbuilder import OHLCVbuilder
+from .ohlcvbuilder import OHLCVBuilder
 from .inventory import Inventory
 from .exchange import Exchange, ExchangeError
 from collections import deque, defaultdict
@@ -44,12 +44,13 @@ class Strategy:
         self.api = Exchange(self.settings.apiKey, self.settings.secret)
 
         # ストリーム配信
-        self.streaming = Streaming(Streaming.SocketioSource())
-        self.executions_ep = self.streaming.get_trades_endpoint(self.pair, 5000)
+        self.streaming = Streaming(Streaming.WebsocketSource())
+        self.executions_ep = await self.streaming.get_trades_endpoint(self.pair, 5000)
 
         # OHLCVビルダー設定
-        self.ohlcvbuilder = OHLCVbuilder(maxlen=self.settings.max_ohlcv_size,\
-            rich_ohlcv=not self.settings.disable_rich_ohlcv)
+        self.ohlcvbuilder = OHLCVBuilder(
+            maxlen=self.settings.max_ohlcv_size,
+            disable_rich_ohlcv=self.settings.disable_rich_ohlcv)
 
         # 注文管理
         self.inventory = Inventory(Exchange.ProductSpecs[self.pair])
@@ -83,6 +84,7 @@ class Strategy:
         try:
             res = await self.api.order(self.pair,side,size,limit)
             self.inventory.new_order(myid,res)
+            o = self.inventory.get_order(myid)
             self.logger.info('NEW {myid} {status} {order_type} {rate} {executed_amount}/{amount} {id}'.format(**o))
         except ExchangeError as e:
             self.logger.warning(type(e).__name__ + ": {0}".format(e))
@@ -105,7 +107,7 @@ class Strategy:
 
     async def check_trades(self):
         try:
-            trades = await self.api.get_my_trades(pair=self.pair, since=self.latest_trade_id))
+            trades = await self.api.get_my_trades(end=self.latest_trade_id)
             if len(trades):
                 self.latest_trade_id = max(t['id'] for t in trades)
             self.inventory.check_my_trades(trades)
@@ -156,7 +158,7 @@ class Strategy:
                 if self.settings.minimum_interval:
                     t1 = last_entry_time // self.settings.minimum_interval
                     t2 = time() // self.settings.minimum_interval
-                    can_entry = t2 >= t1
+                    can_entry = t2 > t1
                 else:
                     can_entry = True
 

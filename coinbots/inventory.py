@@ -16,6 +16,7 @@ class Inventory:
             self.spec = spec
             self.positions = deque(initial_positions)
             self.compute_summary()
+            self.netprofit = 0
 
         def add(self, p):
             """建玉追加"""
@@ -30,17 +31,22 @@ class Inventory:
                     break
                 else:
                     if l['amount'] >= r['amount']:
+                        pnl = (r['rate']-l['rate'])*r['amount']
                         # 決済
                         l['amount'] = self.spec.round_amount(l['amount'] - r['amount'])
                         if l['amount'] > 0:
                             # サイズが残っている場合、ポジションを戻す
                             self.positions.appendleft(l)
                     else:
+                        pnl = (r['rate']-l['rate'])*l['amount']
                         # 決済
                         r['amount'] = self.spec.round_amount(r['amount'] - l['amount'])
                         if r['amount'] > 0:
                             # サイズが残っている場合、ポジションを戻す
                             self.positions.append(r)
+                    if l['side']=='sell':
+                        pnl *= -1
+                    self.netprofit += pnl
             # 建玉情報更新
             self.compute_summary()
 
@@ -105,10 +111,11 @@ class Inventory:
             self.logger.info('EXE {myid} {status} {order_type} {average_price} {executed_amount}/{amount} {id}'.format(**o))
             # ポジション追加
             self.position.add(tr)
-            self.logger.info('POSITION: size {0} avg {1:.1f} pnl {2:.1f}'.format(\
+            self.logger.info('POSITION: size {0} avg {1:.1f} pnl {2:.1f} netprofit {3:.1f}'.format(\
                 self.position.position_size,
                 self.position.position_avg_price,
-                self.position.position_pnl))
+                self.position.position_pnl,
+                self.position.netprofit))
 
     async def start(self):
         await asyncio.wait([
