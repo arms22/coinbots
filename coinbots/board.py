@@ -101,8 +101,8 @@ if __name__ == "__main__":
                     asks = [b for b in board.asks if b['size']>=0.1]
                     count += 1
                     print(count)
-                    for b,a in zip(bids[:10],asks[:10]):
-                        print(f'{b["price"]:8.3f} {b["size"]:10.3f} | {a["size"]:<10.3f} {a["price"]:8.3f}')
+                    for b,a in zip(bids[:20],asks[:20]):
+                        print(f'{b["price"]:<8.0f} {b["size"]:6.2f}|{a["size"]:<6.2f} {a["price"]:8.0f}')
                 except Exception as e:
                     print(e)
 
