@@ -33,14 +33,14 @@ class Inventory:
                     if l['amount'] >= r['amount']:
                         pnl = (r['rate']-l['rate'])*r['amount']
                         # 決済
-                        l['amount'] = self.spec.round_amount(l['amount'] - r['amount'])
+                        l['amount'] = self.spec.round_amount(fsum([l['amount'],-r['amount']]))
                         if l['amount'] > 0:
                             # サイズが残っている場合、ポジションを戻す
                             self.positions.appendleft(l)
                     else:
                         pnl = (r['rate']-l['rate'])*l['amount']
                         # 決済
-                        r['amount'] = self.spec.round_amount(r['amount'] - l['amount'])
+                        r['amount'] = self.spec.round_amount(fsum([r['amount'],-l['amount']]))
                         if r['amount'] > 0:
                             # サイズが残っている場合、ポジションを戻す
                             self.positions.append(r)

@@ -3,6 +3,7 @@ import aiohttp
 import asyncio
 import logging
 import json
+import socketio
 from datetime import datetime
 from collections import deque, defaultdict
 from time import time
@@ -18,22 +19,9 @@ class Streaming:
         self.callbacks = defaultdict(list)
         self.on_connect = None
 
-    async def _on_data(self,data):
-        dat = {}
-        channel = ''
-        if len(data)==5:
-            channel = data[1]+'-trades'
-            dat['id'] = data[0]
-            dat['pair'] = data[1]
-            dat['rate'] = float(data[2])
-            dat['amount'] = float(data[3])
-            dat['order_type'] = data[4]
-        elif len(data)==2:
-            channel = data[0]+'-orderbook'
-            dat['asks'] = [ [float(b[0]),float(b[1])] for b in data[1].get('asks',[])]
-            dat['bids'] = [ [float(b[0]),float(b[1])] for b in data[1].get('bids',[])]
+    async def _on_data(self,channel,data):
         for cb in self.callbacks[channel]:
-            await cb(channel,dat)
+            await cb(channel,data)
 
     async def _subscribe_registred_channels(self):
         if len(self.subscribed_channels):
@@ -74,6 +62,10 @@ class Streaming:
     async def get_orderbook_endpoint(self, pair):
         ep = Streaming.BufferedEndpoint()
         return await self.add_endpoint(pair+'-orderbook',ep)
+
+    async def get_trades2_endpoint(self, pair, maxlen=100):
+        ep = Streaming.BufferedEndpoint(maxlen=maxlen)
+        return await self.add_endpoint(pair+'-trades-v2',ep)
 
     async def start(self):
         if self.running == False:
@@ -122,6 +114,59 @@ class Streaming:
             self.running = False
             await self._disconnect()
 
+    class SocketioSource(Source):
+        def __init__(self):
+            super().__init__()
+            self.sio = None
+            self.sio_connected = False
+
+        async def _on_disconnect(self):
+            self.logger.info('sio disconnected')
+            self.sio_connected = False
+
+        async def _on_connect(self):
+            self.logger.info('sio connected')
+            self.sio_connected = True
+            await self.on_connect()
+
+        async def _on_trades(self,trades):
+            if isinstance(trades[0],list):
+                channel = trades[0][1]+'-trades-v2'
+                dat = [{'id':t[0],'pair':t[1],'rate':float(t[2]),'amount':float(t[3]),'order_type':t[4]} for t in trades]
+            else:
+                t = trades
+                channel = t[1]+'-trades'
+                dat = {'id':t[0],'pair':t[1],'rate':float(t[2]),'amount':float(t[3]),'order_type':t[4]}
+            await self.on_data(channel,dat)
+
+        async def _on_orderbook(self,ob):
+            channel = ob[0]+'-orderbook'
+            dat = {}
+            dat['asks'] = [[float(b[0]),float(b[1])] for b in ob[1].get('asks',[])]
+            dat['bids'] = [[float(b[0]),float(b[1])] for b in ob[1].get('bids',[])]
+            await self.on_data(channel,dat)
+
+        async def subscribe(self,channel):
+            if self.sio_connected:
+                await self.sio.emit('subscribe',channel)
+
+        async def unsubscribe(self,channel):
+            if self.sio_connected:
+                await self.sio.emit('unsubscribe',channel)
+
+        async def _disconnect(self):
+            if self.sio_connected:
+                await self.sio.disconnect()
+
+        async def _run_loop(self):
+            self.sio = socketio.AsyncClient(reconnection=False)
+            self.sio.on('connect', self._on_connect)
+            self.sio.on('disconnect', self._on_disconnect)
+            self.sio.on('trades', self._on_trades)
+            self.sio.on('orderbook', self._on_orderbook)
+            await self.sio.connect('wss://ws.coincheck.com', transports = ['websocket'])
+            await self.sio.wait()
+
     class WebsocketSource(Source):
         def __init__(self):
             super().__init__()
@@ -150,7 +195,20 @@ class Streaming:
                     msg = await self.ws.receive()
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         message = json.loads(msg.data)
-                        await self.on_data(message)
+                        channel = ''
+                        dat = {}
+                        if len(data)==5:
+                            channel = data[1]+'-trades'
+                            dat['id'] = data[0]
+                            dat['pair'] = data[1]
+                            dat['rate'] = float(data[2])
+                            dat['amount'] = float(data[3])
+                            dat['order_type'] = data[4]
+                        elif len(data)==2:
+                            channel = data[0]+'-orderbook'
+                            dat['asks'] = [ [float(b[0]),float(b[1])] for b in data[1].get('asks',[])]
+                            dat['bids'] = [ [float(b[0]),float(b[1])] for b in data[1].get('bids',[])]
+                        await self.on_data(channel,dat)
                     elif msg.type == aiohttp.WSMsgType.CLOSED:
                         self.ws_connected = False
                         self.logger.info('wss disconnected')
@@ -235,7 +293,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     async def public_main():
-        streaming = Streaming(Streaming.WebsocketSource())
+        # streaming = Streaming(Streaming.WebsocketSource())
+        streaming = Streaming(Streaming.SocketioSource())
         executions_ep = await streaming.get_trades_endpoint('btc_jpy')
         book_ep = await streaming.get_orderbook_endpoint('btc_jpy')
         async def poll():

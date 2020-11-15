@@ -72,7 +72,7 @@ if __name__ == "__main__":
     logging.getLogger('engineio').setLevel(logging.WARNING)
 
     async def main():
-        streaming = Streaming(Streaming.WebsocketSource())
+        streaming = Streaming(Streaming.SocketioSource())
         board = Board(args.pair)
         await board.attach(streaming)
         async def poll():
