@@ -26,18 +26,19 @@ class Board:
         self.bids = [{'price':k,'size':v} for k,v in self.temp_bids.items()]
         self.asks = [{'price':k,'size':v} for k,v in self.temp_asks.items()]
 
-    async def create(self, board):
-        async with self.cond:
-            self._updated = True
-            self._needs_sort = False
-            self._create(board)
-            self.cond.notify()
-
     def _update(self, board):
         self.temp_bids.update({b[0]:b[1] for b in board['bids']})
         self.temp_asks.update({b[0]:b[1] for b in board['asks']})
 
-    async def update(self, board):
+    async def attach(self, streaming):
+        api = CCAPI()
+        self._create(type_converter(await api.orderbooks(pair=self.pair)))
+        await api.close()
+        await streaming.subscribe_channel(self.pair+'-orderbook',self._orderbook)
+        self._updated = True
+        self._needs_sort = False
+
+    async def _orderbook(self, channel, board):
         async with self.cond:
             self._updated = True
             self._needs_sort = True
@@ -52,28 +53,10 @@ class Board:
             self.bids = [{'price':k,'size':v} for k,v in sorted(self.temp_bids.items(),reverse=True)]
             self.asks = [{'price':k,'size':v} for k,v in sorted(self.temp_asks.items())]
 
-    async def _on_connect(self):
-        await self.streaming.subscribe_channel(self.pair+'-orderbook',self._depth_diff)
-        api = CCAPI()
-        ob = await api.orderbooks(pair=self.pair)
-        self._create(type_converter(ob))
-        await api.close()
-
-    async def _depth_diff(self, channel, board):
-        await self.update(board)
-
-    async def start(self):
-        self.streaming = Streaming(Streaming.WebsocketSource())
-        self.streaming.on_connect = self._on_connect
-        await asyncio.wait([self.streaming.start()])
-
     async def wait(self):
         async with self.cond:
             await self.cond.wait_for(lambda:self._updated)
             self._updated = False
-
-    async def stop(self):
-        await self.streaming.stop()
 
 if __name__ == "__main__":
     import argparse
@@ -88,7 +71,9 @@ if __name__ == "__main__":
     logging.getLogger('engineio').setLevel(logging.WARNING)
 
     async def main():
+        streaming = Streaming(Streaming.WebsocketSource())
         board = Board(args.pair)
+        await board.attach(streaming)
         async def poll():
             count = 0
             while True:
@@ -106,6 +91,6 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(e)
 
-        await asyncio.wait([board.start(),poll()])
+        await asyncio.wait([streaming.start(),poll()])
 
     asyncio.get_event_loop().run_until_complete(asyncio.wait([main()]))
