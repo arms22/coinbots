@@ -52,6 +52,7 @@ class Board:
             self.temp_asks = {k:v for k,v in self.temp_asks.items() if v>0}
             self.bids = [{'price':k,'size':v} for k,v in sorted(self.temp_bids.items(),reverse=True)]
             self.asks = [{'price':k,'size':v} for k,v in sorted(self.temp_asks.items())]
+        return self.bids, self.asks
 
     async def wait(self):
         async with self.cond:
