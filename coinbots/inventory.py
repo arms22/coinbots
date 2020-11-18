@@ -91,9 +91,9 @@ class Inventory:
     def get_active_orders(self):
         return [o for o in self.order_for_myid.values() if o['status'] in Inventory.OPEN_STATUS]
 
-    def get_untracking_active_orders(self):
-        my_orders = {o['id']:o for o in self.order_for_myid.values()}
-        return [o for o in self.active_orders.values() if o['status'] in Inventory.OPEN_STATUS and o['id'] not in my_orders]
+    def get_nonactive_orders(self):
+        my_orders = {o['id']:o for o in self.order_for_myid.values() if o['status'] in Inventory.OPEN_STATUS}
+        return [o for o in list(self.active_orders.values())+list(self.nonactive_orders.values()) if o['id'] not in my_orders]
 
     def on_execute(self, o, tr):
         # 注文情報更新

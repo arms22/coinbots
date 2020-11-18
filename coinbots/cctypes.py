@@ -25,9 +25,11 @@ _CCTypes = defaultdict(lambda:lambda x:x, {
     'transactions': _type_converter,
     'funds': _type_converter,
     'btc': float,
+    'btc_reserved': float,
     'fct': float,
     'etc': float,
     'jpy': float,
+    'jpy_reserved': float,
     'bids': lambda bids:[[float(d[0]),float(d[1])] for d in bids],
     'asks': lambda asks:[[float(d[0]),float(d[1])] for d in asks],
 })

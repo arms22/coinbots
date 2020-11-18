@@ -35,6 +35,10 @@ class Exchange:
             error = res.get('error', '')
             raise ExchangeError(f'{error} in {errfrom}')
 
+    async def get_orderbooks(self, pair):
+        res = await self.api.orderbooks(pair=pair)
+        return type_converter(res)
+
     async def order(self, pair, side, amount, rate, stop_loss_rate=None):
         spec = Exchange.ProductSpecs[pair]
         amount = spec.round_amount(amount)
@@ -62,6 +66,7 @@ class Exchange:
         return orderRes
 
     async def cancel(self, orderRes):
+        orderRes['status'] = 'cancelling'
         res = await self.api.cancel(orderRes['id'])
         self._get_data(res, orderRes, f'cancel with {orderRes["pair"]} {orderRes["id"]}')
         orderRes['status'] = 'cancel'

@@ -30,10 +30,10 @@ class Board:
         self.temp_bids.update({b[0]:b[1] for b in board['bids']})
         self.temp_asks.update({b[0]:b[1] for b in board['asks']})
 
+    def sync(self, board):
+        self._create(board)
+
     async def attach(self, streaming):
-        api = CCAPI()
-        self._create(type_converter(await api.orderbooks(pair=self.pair)))
-        await api.close()
         await streaming.subscribe_channel(self.pair+'-orderbook',self._orderbook)
         self._updated = True
         self._needs_sort = False

@@ -194,7 +194,7 @@ class Streaming:
                 while True:
                     msg = await self.ws.receive()
                     if msg.type == aiohttp.WSMsgType.TEXT:
-                        message = json.loads(msg.data)
+                        data = json.loads(msg.data)
                         channel = ''
                         dat = {}
                         if len(data)==5:

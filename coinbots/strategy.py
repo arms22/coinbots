@@ -49,7 +49,7 @@ class Strategy:
         self.api = Exchange(self.settings.apiKey, self.settings.secret)
 
         # ストリーム配信
-        self.streaming = Streaming(Streaming.WebsocketSource())
+        self.streaming = Streaming(Streaming.SocketioSource())
         self.executions_ep = await self.streaming.get_trades_endpoint(self.pair, 5000)
 
         # OHLCVビルダー設定
@@ -64,10 +64,14 @@ class Strategy:
         # 板情報
         if self.settings.enable_board:
             self.board = Board(self.pair)
+            ob = await self.api.get_orderbooks(self.pair)
+            self.board.sync(ob)
             await self.board.attach(self.streaming)
 
         # ロジック実行
         await asyncio.wait([
+            self.balance_polling(),
+            self.cancel_nonactive_orders(),
             self.standard_logic(),
             self.inventory.start(),
             self.streaming.start()])
@@ -75,11 +79,11 @@ class Strategy:
     def get_order(self, myid):
         return self.inventory.get_order(myid)
 
-    async def order(self, myid, side, size, limit=None, cancel_after_seconds=None):
+    async def order(self, myid, side, size, limit=None, cancel_after_seconds=None, limit_mask=0):
         # 注文がオープンならキャンセル
         o = self.inventory.get_order(myid)
         if o['status'] in Inventory.OPEN_STATUS:
-            if abs(o['rate']-limit)>0 or abs(o['amount']-size)>0:
+            if abs(o['rate']-limit)>limit_mask or abs(o['amount']-size)>0:
                 try:
                     self.logger.info('CANCEL {myid} {status} {order_type} {rate} {executed_amount}/{amount} {id}'.format(**o))
                     await self.api.cancel(o)
@@ -126,7 +130,13 @@ class Strategy:
         pass
 
     async def check_balance(self):
-        pass
+        try:
+            balance = await self.api.balance()
+            btc = balance['btc']+balance['btc_reserved']
+            jpy = balance['jpy']+balance['jpy_reserved']
+            self.logger.info(f'btc {btc:.8f} jpy {jpy:.0f}')
+        except ExchangeError as e:
+            self.logger.warning(type(e).__name__ + ": {0}".format(e))
 
     async def check_trades(self):
         try:
@@ -137,37 +147,58 @@ class Strategy:
         except ExchangeError as e:
             self.logger.warning(type(e).__name__ + ": {0}".format(e))
 
-    async def balance_polling(self):
-        while True:
-            await asyncio.sleep(180)
-            try:
-                # 定期的に資産情報取得
-                await self.check_balance()
-            except ExchangeError as e:
-                self.logger.warning(type(e).__name__ + ": {0}".format(e))
-            except Exception as e:
-                self.logger.exception(e)
-
-    async def cancel_untracking_orders(self):
+    async def sync_orderbooks(self):
         while True:
             await asyncio.sleep(30)
             try:
-                # 注文情報更新
-                orders = self.inventory.get_untracking_active_orders()
-                if len(orders):
-                    await self.api.update_orders(self.pair, orders)
-                    # 注文キャンセル
-                    orders = self.inventory.get_untracking_active_orders()
-                    if len(orders):
-                        await self.api.cancel_orders(self.pair, orders)
+                # 定期的に板情報を更新
+                ob = await self.api.get_orderbooks(self.pair)
+                self.board.sync(ob)
+            except Exception as e:
+                self.logger.exception(e)
+
+    async def balance_polling(self):
+        while True:
+            await asyncio.sleep(300)
+            try:
+                # 定期的に資産情報取得
+                await self.check_balance()
+            except Exception as e:
+                self.logger.exception(e)
+
+    async def cancel_nonactive_orders(self):
+        while True:
+            await asyncio.sleep(15)
+            try:
+                # 最近の注文情報取得
+                recent_orders = self.inventory.get_nonactive_orders()
+                if len(recent_orders):
+                    # 未決済の注文取得
+                    open_orders = await self.api.get_orders()
+                    for o in open_orders:
+                        self.logger.info('{id} {order_type} {rate} {pair} {pending_amount}'.format(**o))
+                    open_orders = {o['id']:o for o in open_orders}
+                    # アクティブ注文を全てキャンセル
+                    cancel_needed = [o for o in recent_orders if o['id'] in open_orders]
+                    if len(cancel_needed):
+                        for o in cancel_needed:
+                            try:
+                                self.logger.info('FORCED CANCEL {myid} {status} {order_type} {rate} {executed_amount}/{amount} {id}'.format(**o))
+                                await self.api.cancel(o)
+                            except ExchangeError as e:
+                                self.logger.warning(type(e).__name__ + ": {0}".format(e))
+
             except ExchangeError as e:
                 self.logger.warning(type(e).__name__ + ": {0}".format(e))
             except Exception as e:
                 self.logger.exception(e)
 
     async def standard_logic(self):
-        await self.check_balance()
-        await self.executions_ep.wait()
+        try:
+            await self.check_balance()
+            await self.executions_ep.wait()
+        except Exception as e:
+            self.logger.exception(e)
         last_entry_time = time()
         while True:
             try:
