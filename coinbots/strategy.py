@@ -147,16 +147,6 @@ class Strategy:
         except ExchangeError as e:
             self.logger.warning(type(e).__name__ + ": {0}".format(e))
 
-    async def sync_orderbooks(self):
-        while True:
-            await asyncio.sleep(30)
-            try:
-                # 定期的に板情報を更新
-                ob = await self.api.get_orderbooks(self.pair)
-                self.board.sync(ob)
-            except Exception as e:
-                self.logger.exception(e)
-
     async def balance_polling(self):
         while True:
             await asyncio.sleep(300)
@@ -235,7 +225,13 @@ class Strategy:
                     last_entry_time = time()
                     if self.settings.enable_board:
                         board = self.board
-                        board.sort()
+                        bids, asks = board.sort()
+                        bid, ask = bids[0]['price'], asks[0]['price']
+                        spread = ask - bid
+                        if spread<-50:
+                            self.logger.warning(f'orderbooks needs to be sync. spr {spread} bid {bid} ask {ask}')
+                            ob = await self.api.get_orderbooks(self.pair)
+                            board.sync(ob)
                     else:
                         board = None
                     await self.yourlogic(

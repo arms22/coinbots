@@ -30,7 +30,7 @@ class CCAPI:
         if ('/api/exchange/orders' in path) or ('/api/accounts' in path):
             apiKey = self.apiKey
             secret = self.secret
-            nonce = str(int(time.time() * 1000))
+            nonce = str(int(time.time() * 10000))
             if method == 'POST':
                 data = json.dumps(params)
                 params = None
