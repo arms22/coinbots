@@ -34,6 +34,7 @@ class Strategy:
 
         # その他設定
         self.settings.enable_board = False
+        self.settings.enable_board_api = False
 
         # ログ設定
         self.logger = logging.getLogger(__name__)
@@ -61,12 +62,15 @@ class Strategy:
         self.inventory = Inventory(self.spec)
         self.latest_trade_id = None
 
-        # 板情報
+        # 板情報（配信）
         if self.settings.enable_board:
             self.board = Board(self.pair)
-            ob = await self.api.get_orderbooks(self.pair)
+            ob = await self.api.orderbooks(self.pair)
             self.board.sync(ob)
             await self.board.attach(self.streaming)
+        # 板情報（API）
+        elif self.settings.enable_board_api:
+            self.board = Board(self.pair)
 
         # ロジック実行
         await asyncio.wait([
@@ -131,10 +135,14 @@ class Strategy:
 
     async def check_balance(self):
         try:
+            ticker = await self.api.ticker(pair=self.pair)
             balance = await self.api.balance()
             btc = balance['btc']+balance['btc_reserved']
             jpy = balance['jpy']+balance['jpy_reserved']
-            self.logger.info(f'btc {btc:.8f} jpy {jpy:.0f}')
+            total = int(jpy + ticker['bid']*btc)
+            balance['jpy_total'] = total
+            self.balance = dotdict(balance)
+            self.logger.info(f'btc {btc:.8f} jpy {jpy:.0f} total {total}')
         except ExchangeError as e:
             self.logger.warning(type(e).__name__ + ": {0}".format(e))
 
@@ -208,6 +216,9 @@ class Strategy:
 
                 # 注文情報更新
                 if can_entry:
+                    if self.settings.enable_board_api:
+                        ob = await self.api.orderbooks(self.pair)
+                        self.board.sync(ob)
                     await self.check_trades()
 
                 # ポジション情報コピー
@@ -230,8 +241,10 @@ class Strategy:
                         spread = ask - bid
                         if spread<-50:
                             self.logger.warning(f'orderbooks needs to be sync. spr {spread} bid {bid} ask {ask}')
-                            ob = await self.api.get_orderbooks(self.pair)
+                            ob = await self.api.orderbooks(self.pair)
                             board.sync(ob)
+                    elif self.settings.enable_board_api:
+                        board = self.board
                     else:
                         board = None
                     await self.yourlogic(

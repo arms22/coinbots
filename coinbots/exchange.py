@@ -9,11 +9,26 @@ from collections import defaultdict
 class ExchangeError(Exception):
     pass
 
+class InsufficientFunds(ExchangeError):
+    pass
+
 class Exchange:
 
     ProductSpecs = {
         'btc_jpy':dotdict({
             'round_price':int,
+            'round_amount':lambda x:round(x,8)
+        }),
+        'etc_jpy':dotdict({
+            'round_price':lambda x:round(x,2),
+            'round_amount':lambda x:round(x,8)
+        }),
+        'fct_jpy':dotdict({
+            'round_price':lambda x:round(x,2),
+            'round_amount':lambda x:round(x,8)
+        }),
+        'mona_jpy':dotdict({
+            'round_price':lambda x:round(x,2),
             'round_amount':lambda x:round(x,8)
         }),
     }
@@ -33,9 +48,15 @@ class Exchange:
             return type_converter(data)
         else:
             error = res.get('error', '')
+            if '所持金額が足りません' in error:
+                raise InsufficientFunds(f'{error} in {errfrom}')
             raise ExchangeError(f'{error} in {errfrom}')
 
-    async def get_orderbooks(self, pair):
+    async def ticker(self, pair):
+        res = await self.api.ticker(pair=pair)
+        return type_converter(res)
+
+    async def orderbooks(self, pair):
         res = await self.api.orderbooks(pair=pair)
         return type_converter(res)
 
@@ -103,25 +124,28 @@ if __name__ == '__main__':
     from pprint import pprint as pp
 
     async def main():
-        apiKey = ''
-        secret = ''
-        api = Exchange(apiKey, secret)
+        try:
+            apiKey = ''
+            secret = ''
+            api = Exchange(apiKey, secret)
 
-        # order = await api.order('mona_jpy','buy',1,90)
-        # pp(order)
+            order = await api.order('mona_jpy','buy',1.123456789,100.123456789)
+            pp(order)
 
-        # orders = await api.get_orders()
-        # pp(orders)
+            # orders = await api.get_orders()
+            # pp(orders)
 
-        # order = await api.cancel(order)
-        # pp(order)
+            # order = await api.cancel(order)
+            # pp(order)
 
-        trades = await api.get_my_trades()
-        pp(trades)
+            # trades = await api.get_my_trades()
+            # pp(trades)
 
-        # balance = await api.balance()
-        # pp(balance)
-
-        await api.api.close()
+            # balance = await api.balance()
+            # pp(balance)
+        except Exception as e:
+            print(e)
+        finally:
+            await api.api.close()
 
     asyncio.get_event_loop().run_until_complete(main())

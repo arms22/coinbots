@@ -32,11 +32,11 @@ class Board:
 
     def sync(self, board):
         self._create(board)
+        self._updated = True
+        self._needs_sort = False
 
     async def attach(self, streaming):
         await streaming.subscribe_channel(self.pair+'-orderbook',self._orderbook)
-        self._updated = True
-        self._needs_sort = False
 
     async def _orderbook(self, channel, board):
         async with self.cond:
